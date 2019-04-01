@@ -29,6 +29,7 @@ grbl_post.export(object, "/path/to/file.ncc")
 
 
 import FreeCAD
+from FreeCAD import Units
 import PathScripts.PostUtils as PostUtils
 import argparse
 import datetime
@@ -61,7 +62,8 @@ OUTPUT_TOOL_CHANGE =     False    # default don't output M6 tool changes (commen
 DRILL_RETRACT_MODE =     'G98'    # Default value of drill retractations (CURRENT_Z) other possible value is G99
 MOTION_MODE =            'G90'    # G90 for absolute moves, G91 for relative
 UNITS =                  'G21'    # G21 for metric, G20 for us standard
-SPEED_MULTIPLIER =          60    # *60 convert FreeCAD's mm/s to mm/mn
+UNIT_FORMAT = 'mm'
+UNIT_SPEED_FORMAT = 'mm/min'
 PRE_OPERATION =         ''''''    #Pre operation text will be inserted before every operation
 POST_OPERATION =        ''''''    #Post operation text will be inserted after every operation
 TOOL_CHANGE =           ''''''    #Tool Change commands will be inserted before a tool change
@@ -85,6 +87,7 @@ parser.add_argument('--translate_drill',    action='store_true', help='translate
 parser.add_argument('--no-translate_drill', action='store_true', help='don\'t translate drill cycles G81, G82 & G83 in G0/G1 movements')
 parser.add_argument('--preamble',                                help='set commands to be issued before the first command, default="G17 G90"')
 parser.add_argument('--postamble',                               help='set commands to be issued after the last command, default="M5\nG17 G90\n;M2"')
+parser.add_argument('--inches',             action='store_true', help='Convert output for US imperial mode (G20)')
 TOOLTIP_ARGS=parser.format_help()
 
 
@@ -101,7 +104,7 @@ CURRENT_Z = 0
 
 
 # to distinguish python built-in open function from the one declared below
-if open.__module__ == '__builtin__':
+if open.__module__ in ['__builtin__','io']:
   pythonopen = open
 
 
@@ -114,6 +117,9 @@ def processArguments(argstring):
   global PRECISION
   global PREAMBLE
   global POSTAMBLE
+  global UNITS
+  global UNIT_SPEED_FORMAT
+  global UNIT_FORMAT
   global TRANSLATE_DRILL_CYCLES
 
   try:
@@ -143,6 +149,11 @@ def processArguments(argstring):
       TRANSLATE_DRILL_CYCLES = False
     if args.translate_drill:
       TRANSLATE_DRILL_CYCLES = True
+    if args.inches:
+      UNITS = 'G20'
+      UNIT_SPEED_FORMAT = 'in/min'
+      UNIT_FORMAT = 'in'
+      PRECISION = 4
 
   except:
     return False
@@ -162,6 +173,8 @@ def export(objectslist, filename, argstring):
     return None
 
   global UNITS
+  global UNIT_FORMAT
+  global UNIT_SPEED_FORMAT
   global MOTION_MODE
 
   print("Post Processor: " + __name__ +" postprocessing...")
@@ -187,8 +200,12 @@ def export(objectslist, filename, argstring):
     gcode += linenumber() + MOTION_MODE + "\n"
   if 'G21' in PREAMBLE:
     UNITS = 'G21'
+    UNIT_FORMAT = 'mm'
+    UNIT_SPEED_FORMAT = 'mm/min'
   elif 'G20' in PREAMBLE:
     UNITS = 'G20'
+    UNIT_FORMAT = 'in'
+    UNIT_SPEED_FORMAT = 'in/min'
   else:
     gcode += linenumber() + UNITS + "\n"
 
@@ -234,8 +251,8 @@ def export(objectslist, filename, argstring):
   print("done postprocessing.")
 
   #write the file
-  gfile = pythonopen(filename,"wb")
-  gfile.write(gcode)
+  gfile = pythonopen(filename,"w")
+  gfile.write(final)
   gfile.close()
 
 
@@ -271,7 +288,7 @@ def parse(pathobj):
   lastcommand = None
   precision_string = '.' + str(PRECISION) +'f'
 
-  params = ['X','Y','Z','A','B','C','I','J','K','F','S','T','Q','R','L','P']
+  params = ['X','Y','Z','A','B','C', 'U', 'V', 'W','I','J','K','F','S','T','Q','R','L','P']
 
   if hasattr(pathobj,"Group"): # We have a compound or project.
     if OUTPUT_COMMENTS: out += linenumber() + "(compound: " + pathobj.Label + ")\n"
@@ -301,11 +318,16 @@ def parse(pathobj):
         if param in c.Parameters:
           if param == 'F':
             if command not in RAPID_MOVES:
-              outstring.append(param + format(c.Parameters['F'] * SPEED_MULTIPLIER, '.2f'))
-          elif param == 'T':
-            outstring.append(param + str(c.Parameters['T']))
-          else:
+              speed = Units.Quantity(c.Parameters['F'], FreeCAD.Units.Velocity)
+              if speed.getValueAs(UNIT_SPEED_FORMAT) > 0.0:
+                outstring.append(param + format(float(speed.getValueAs(UNIT_SPEED_FORMAT)), precision_string))
+          elif param in ['T', 'H', 'D', 'S', 'P', 'L']:
+            outstring.append(param + str(c.Parameters[param]))
+          elif param in ['A', 'B', 'C']:
             outstring.append(param + format(c.Parameters[param], precision_string))
+          else: # [X, Y, Z, U, V, W, I, J, K, R, Q] (Conversion eventuelle mm/inches)
+            pos = Units.Quantity(c.Parameters[param], FreeCAD.Units.Length)
+            outstring.append(param + format(float(pos.getValueAs(UNIT_FORMAT)), precision_string))
 
       # store the latest command
       lastcommand = command
@@ -313,11 +335,11 @@ def parse(pathobj):
         # Memorise la position courante pour calcul des mouvements relatis et du plan de retrait
       if command in MOTION_COMMANDS:
         if 'X' in c.Parameters:
-          CURRENT_X = c.Parameters['X']
+          CURRENT_X = Units.Quantity(c.Parameters['X'], FreeCAD.Units.Length)
         if 'Y' in c.Parameters:
-          CURRENT_Y = c.Parameters['Y']
+          CURRENT_Y = Units.Quantity(c.Parameters['Y'], FreeCAD.Units.Length)
         if 'Z' in c.Parameters:
-          CURRENT_Z = c.Parameters['Z']
+          CURRENT_Z = Units.Quantity(c.Parameters['Z'], FreeCAD.Units.Length)
 
       if command in ('G98', 'G99'):
         DRILL_RETRACT_MODE = command
@@ -365,6 +387,9 @@ def drill_translate(outstring, cmd, params):
   global CURRENT_X
   global CURRENT_Y
   global CURRENT_Z
+  global UNITS
+  global UNIT_FORMAT
+  global UNIT_SPEED_FORMAT
 
   strFormat = '.' + str(PRECISION) +'f'
 
@@ -379,23 +404,23 @@ def drill_translate(outstring, cmd, params):
   # Pour l'instant, on gere uniquement les cycles dans le plan XY (G17)
   # les autres plans ZX (G18) et YZ (G19) ne sont pas traites : Calculs sur Z uniquement.
   if MOTION_MODE == 'G90': # Deplacements en coordonnees absolues
-    drill_X = params['X']
-    drill_Y = params['Y']
-    drill_Z = params['Z']
-    RETRACT_Z = params['R']
+    drill_X =   Units.Quantity(params['X'], FreeCAD.Units.Length)
+    drill_Y =   Units.Quantity(params['Y'], FreeCAD.Units.Length)
+    drill_Z =   Units.Quantity(params['Z'], FreeCAD.Units.Length)
+    RETRACT_Z = Units.Quantity(params['R'], FreeCAD.Units.Length)
   else: # G91 Deplacements relatifs
-    drill_X = CURRENT_X + params['X']
-    drill_Y = CURRENT_Y + params['Y']
-    drill_Z = CURRENT_Z + params['Z']
-    RETRACT_Z = CURRENT_Z + params['R']
+    drill_X =   CURRENT_X + Units.Quantity(params['X'], FreeCAD.Units.Length)
+    drill_Y =   CURRENT_Y + Units.Quantity(params['Y'], FreeCAD.Units.Length)
+    drill_Z =   CURRENT_Z + Units.Quantity(params['Z'], FreeCAD.Units.Length)
+    RETRACT_Z = CURRENT_Z + Units.Quantity(params['R'], FreeCAD.Units.Length)
 
   if DRILL_RETRACT_MODE == 'G98' and CURRENT_Z >= RETRACT_Z:
     RETRACT_Z = CURRENT_Z
 
   # Recupere les valeurs des autres parametres
-  drill_Speed = params['F']
+  drill_Speed = Units.Quantity(params['F'], FreeCAD.Units.Velocity)
   if cmd == 'G83':
-    drill_Step = params['Q']
+    drill_Step = Units.Quantity(params['Q'], FreeCAD.Units.Length)
   elif cmd == 'G82':
     drill_DwellTime = params['P']
 
@@ -404,29 +429,29 @@ def drill_translate(outstring, cmd, params):
 
   # Mouvement(s) preliminaire(s))
   if CURRENT_Z < RETRACT_Z:
-    trBuff += linenumber() + 'G0 Z' + format(RETRACT_Z, strFormat) + "\n"
-  trBuff += linenumber() + 'G0 X' + format(drill_X, strFormat) + ' Y' + format(drill_Y, strFormat) + "\n"
+    trBuff += linenumber() + 'G0 Z' + format(float(RETRACT_Z.getValueAs(UNIT_FORMAT)), strFormat) + "\n"
+  trBuff += linenumber() + 'G0 X' + format(float(drill_X.getValueAs(UNIT_FORMAT)), strFormat) + ' Y' + format(float(drill_Y.getValueAs(UNIT_FORMAT)), strFormat) + "\n"
   if CURRENT_Z > RETRACT_Z:
-    trBuff += linenumber() + 'G0 Z' + format(CURRENT_Z, strFormat) + "\n"
+    trBuff += linenumber() + 'G0 Z' + format(float(CURRENT_Z.getValueAs(UNIT_FORMAT)), strFormat) + "\n"
 
   # Mouvement de percage
   if cmd in ('G81', 'G82'):
-    trBuff += linenumber() + 'G1 Z' + format(drill_Z, strFormat) + ' F' + format(drill_Speed, '.2f') + "\n"
+    trBuff += linenumber() + 'G1 Z' + format(float(drill_Z.getValueAs(UNIT_FORMAT)), strFormat) + ' F' + format(float(drill_Speed.getValueAs(UNIT_SPEED_FORMAT)), '.2f') + "\n"
     # Temporisation eventuelle
     if cmd == 'G82':
       trBuff += linenumber() + 'G4 P' + str(drill_DwellTime) + "\n"
     # Sortie de percage
-    trBuff += linenumber() + 'G0 Z' + format(RETRACT_Z, strFormat) + "\n"
+    trBuff += linenumber() + 'G0 Z' + format(float(RETRACT_Z.getValueAs(UNIT_FORMAT)), strFormat) + "\n"
   else: # 'G83'
     next_Stop_Z = RETRACT_Z - drill_Step
     while 1:
       if next_Stop_Z > drill_Z:
-        trBuff += linenumber() + 'G1 Z' + format(next_Stop_Z, strFormat) + ' F' + format(drill_Speed, '.2f') + "\n"
-        trBuff += linenumber() + 'G0 Z' + format(RETRACT_Z, strFormat) + "\n"
+        trBuff += linenumber() + 'G1 Z' + format(float(next_Stop_Z.getValueAs(UNIT_FORMAT)), strFormat) + ' F' + format(float(drill_Speed.getValueAs(UNIT_SPEED_FORMAT)), '.2f') + "\n"
+        trBuff += linenumber() + 'G0 Z' + format(float(RETRACT_Z.getValueAs(UNIT_FORMAT)), strFormat) + "\n"
         next_Stop_Z -= drill_Step
       else:
-        trBuff += linenumber() + 'G1 Z' + format(drill_Z, strFormat) + ' F' + format(drill_Speed, '.2f') + "\n"
-        trBuff += linenumber() + 'G0 Z' + format(RETRACT_Z, strFormat) + "\n"
+        trBuff += linenumber() + 'G1 Z' + format(float(drill_Z.getValueAs(UNIT_FORMAT)), strFormat) + ' F' + format(float(drill_Speed.getValueAs(UNIT_SPEED_FORMAT)), '.2f') + "\n"
+        trBuff += linenumber() + 'G0 Z' + format(float(RETRACT_Z.getValueAs(UNIT_FORMAT)), strFormat) + "\n"
         break
 
   if MOTION_MODE == 'G91':
