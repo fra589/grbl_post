@@ -1,6 +1,6 @@
 <h1 align="center">grbl_post</h1>
 
-## FreeCAD Path post processor for Grbl development version
+## FreeCAD Path post processor for Grbl, development version.
 ***
 Since jun, 13 2019, the grbl_G81_post.py have replaced the old grbl post processor in the main FreeCAD repository. So it have been renamed to grbl_post.py.
 ***
