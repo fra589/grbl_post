@@ -15,4 +15,4 @@ The default option have been changed between grbl_G81_post.py and grbl_post.py i
 Install of post processor development version for using in the FreeCAD Path module:  
 
 - Personal install :  
-Copy **grbl_post.py** to your **grbl_dev_post.py** in your user macro directory, then select the grbl_dev post processor in your Path job.
+Copy **grbl_post.py** to **grbl_dev_post.py** in your user macro directory, then select the grbl_dev post processor in your Path job.
