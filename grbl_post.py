@@ -4,24 +4,25 @@
 # *   (c) sliptonic (shopinthewoods@gmail.com) 2014                         *
 # *   (c) Gauthier Briere - 2018, 2019                                      *
 # *                                                                         *
+# *   This file is part of the FreeCAD CAx development system.              *
+# *                                                                         *
 # *   This program is free software; you can redistribute it and/or modify  *
 # *   it under the terms of the GNU Lesser General Public License (LGPL)    *
-# *   as published by the Free Software Foundation; either version 2.1 of   *
+# *   as published by the Free Software Foundation; either version 2 of     *
 # *   the License, or (at your option) any later version.                   *
-# *   for detail see the LICENSE text file.                                 *
+# *   for detail see the LICENCE text file.                                 *
 # *                                                                         *
-# *   This program is distributed in the hope that it will be useful,       *
+# *   FreeCAD is distributed in the hope that it will be useful,            *
 # *   but WITHOUT ANY WARRANTY; without even the implied warranty of        *
 # *   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the         *
 # *   GNU Lesser General Public License for more details.                   *
 # *                                                                         *
 # *   You should have received a copy of the GNU Library General Public     *
-# *   License along with This program; if not, write to the Free Software   *
+# *   License along with FreeCAD; if not, write to the Free Software        *
 # *   Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  *
 # *   USA                                                                   *
 # *                                                                         *
 # ***************************************************************************/
-
 
 import FreeCAD
 from FreeCAD import Units
@@ -48,7 +49,7 @@ OUTPUT_HEADER = True              # default output header in output gCode file
 OUTPUT_LINE_NUMBERS = False       # default does'nt utput lines numbers in output gCode file
 SHOW_EDITOR = True                # default show the resulting file dialog output in GUI
 PRECISION = 3                     # Default precision for metric (see http://linuxcnc.org/docs/2.7/html/gcode/overview.html#_g_code_best_practices)
-TRANSLATE_DRILL_CYCLES = True     # If true, G81, G82 & G83 are translated in G0/G1 moves
+TRANSLATE_DRILL_CYCLES = False     # If true, G81, G82 & G83 are translated in G0/G1 moves
 PREAMBLE = '''G17 G90
 '''                               # default preamble text will appear at the beginning of the gCode output file.
 POSTAMBLE = '''M5
@@ -85,8 +86,8 @@ parser.add_argument('--no-line-numbers',    action='store_true', help='don\'t pr
 parser.add_argument('--show-editor',        action='store_true', help='pop up editor before writing output (default)')
 parser.add_argument('--no-show-editor',     action='store_true', help='don\'t pop up editor before writing output')
 parser.add_argument('--precision',          default='3',         help='number of digits of precision, default=3')
-parser.add_argument('--translate_drill',    action='store_true', help='translate drill cycles G81, G82 & G83 in G0/G1 movements (default)')
-parser.add_argument('--no-translate_drill', action='store_true', help='don\'t translate drill cycles G81, G82 & G83 in G0/G1 movements')
+parser.add_argument('--translate_drill',    action='store_true', help='translate drill cycles G81, G82 & G83 in G0/G1 movements')
+parser.add_argument('--no-translate_drill', action='store_true', help='don\'t translate drill cycles G81, G82 & G83 in G0/G1 movements (default)')
 parser.add_argument('--preamble',                                help='set commands to be issued before the first command, default="G17 G90"')
 parser.add_argument('--postamble',                               help='set commands to be issued after the last command, default="M5\nG17 G90\n;M2"')
 parser.add_argument('--inches',             action='store_true', help='Convert output for US imperial mode (G20)')
@@ -375,7 +376,7 @@ def parse(pathobj):
             out += linenumber() + line
 
       if command == "message":
-        if OUTPUT_COMMENTS:
+        if OUTPUT_COMMENTS is False:
           out = []
         else:
           outstring.pop(0)  # remove the command
