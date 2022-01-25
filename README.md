@@ -4,6 +4,8 @@
 ***
 Since jun, 13 2019, the grbl_G81_post.py have replaced the old grbl post processor in the main FreeCAD repository. So it have been renamed to grbl_post.py.
 ***
+Warning ! This is my development and testing version... This version is not necessarily up to date with the production version supplied with the FreeCAD software.
+***
 Drilling cycles (G81, G82 &amp; G83) conversions to G0/G1 moves :  
 Because of Grbl limits (see https://github.com/gnea/grbl/wiki#limitations-by-design), and that not all GCode sender program can do the translation, I added to the standard FreeCAD grbl post processor the ability to translate gCodes between G81, G82 & G83 to the G0, G1 & G4 corresponding moves & pause.
 
